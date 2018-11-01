@@ -1,0 +1,23 @@
+spring:
+  application:
+    name: service
+server:
+  port: ${PORT:8090}
+web3j:
+  client-address: http://localhost:8545
+  http-timeout-seconds: 600
+
+# common
+contract-ownerAccount: "0x70d50eb98e49ac9c9e621b2153caf9f5d126b358"
+contract-address: "0xc1595737346ddb18e041c7ff22cacd49206ca8c1"
+job.enable: true
+
+# deposit
+contract-closing-deposits-job-enable: true
+contract-closing-deposits-period: 1000
+contract-closing-deposits-function: "closeDepos"
+
+# credit
+contract-check-credits-job-enable: true
+contract-check-credits-period: 1000
+contract-check-credits-function: "checkCredits"
