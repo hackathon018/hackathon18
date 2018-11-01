@@ -11,7 +11,7 @@
     </parent>
 
     <groupId>com.bcbank</groupId>
-    <artifactId>service</artifactId>
+    <artifactId>scheduled-service</artifactId>
     <version>1.0-SNAPSHOT</version>
 
     <dependencies>

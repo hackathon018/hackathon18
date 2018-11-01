@@ -256,7 +256,8 @@ contract MintableToken is StandardToken, Ownable {
 }
  
 contract SberRuble is MintableToken {
-    
+    using SafeMath for uint;
+
     string public constant name = "Sberbank Ruble";
     
     string public constant symbol = "SBR";
@@ -274,7 +275,7 @@ contract SberRuble is MintableToken {
     //Зададим базовый кредитный рейтинг
     uint32 private baseWhite = 1000;
     
-    uint private lastDepoPayTime = div(now, 60);
+    uint private lastDepoPayTime = SafeMath.div(now, 60);
     
     //Счета (и кредитные и депозитные) будем вести в таком виде
     struct account {
@@ -286,7 +287,7 @@ contract SberRuble is MintableToken {
     struct clientInfo {
         account[] loans;
         bool black;
-        int white;
+        uint white;
     }
     
     //Кому и сколько вернуть за депозит
@@ -313,10 +314,15 @@ contract SberRuble is MintableToken {
     depoOwner dept;
     depoOwner[] depts;
     
+    constructor() public {
+        setSaleAgent(owner);
+    }
+    
     //Открытие депозита
     function openDeposit(uint _lifeTime, uint _amount) public returns (string) {
         //Высчитаем сразу дату закрытия депозита
-        acc.endTime = add(div(now, 60),_lifeTime));
+        //acc.endTime = add(div(now, 60),_lifeTime);
+        acc.endTime = (now.div(60)).add(_lifeTime);
         acc.bal = _amount;
         
         //Проверка и списание на просроченный кредитов
@@ -330,44 +336,44 @@ contract SberRuble is MintableToken {
                 //заносим клиента в черный список
                 info[msg.sender].black = true;
                 //гасим, полностью или частично, кредит за счет средств депозита
-                if(sub(acc.bal,info[msg.sender].loans[index].bal)) >= 0
+                if(acc.bal.sub(info[msg.sender].loans[index].bal) >= 0)
                 {
-                    if(transfer(owner, info[msg.sender].loans[index].bal){
-                       acc.bal = sub(acc.bal,info[msg.sender].loans[index].bal)
-                       info[msg.sender].loans[index].delete;
+                    if(transfer(owner, info[msg.sender].loans[index].bal)){
+                       acc.bal = acc.bal.sub(info[msg.sender].loans[index].bal);
+                       delete info[msg.sender].loans[index];
                     }
                 }
                 //если задолженность по кредиту больше суммы открытия депозита, то гасим кредит частично на всю доступную сумму
-                else if sub(acc.bal,info[msg.sender].loans[index].bal) < 0 && acc.bal > 0
+                else if (acc.bal.sub(info[msg.sender].loans[index].bal) < 0 && acc.bal > 0)
                 {
-                     if(transfer(owner, acc.bal) {
-                       info[msg.sender].loans[index].bal = sub(info[msg.sender].loans[index].bal,acc.bal);
+                     if(transfer(owner, acc.bal)) {
+                       info[msg.sender].loans[index].bal = info[msg.sender].loans[index].bal.sub(acc.bal);
                        //денег на депозит не осталось, выходим из функции
                        return "Депозит не открыт. Деньги направлены на погашение задолженности по просроченным кредитам";
                     }
                 }
-            };
+            }
 
-        };
+        }
         if (acc.bal < _amount) {
             
         }
         
         //Если остались деньги на открытие депозита, то открываем его
-        if (acc.bal > 0 && transfer(owner,acc.bal) {
+        if (acc.bal > 0 && transfer(owner,acc.bal)) {
             //Открываем депозит на остаток средств
-            emit OpenDeposit(msg.sender,acc.endTime,acc.bal);        
+            //emit OpenDeposit(msg.sender,acc.endTime,acc.bal);        
             
             //Записываем данные депозита в дату выплаты
             //Тут нас интересует сумма выплаты уже с процентами, посчитаем и запишем ее
-            dept.bal = div(mul(acc.bal,100+depositInterest),100);
+            dept.bal = (acc.bal.mul(100+depositInterest)).div(100);
             dept.client = msg.sender;
             depts = depoPay[acc.endTime];
             depts.push(dept);
             depoPay[acc.endTime] = depts;
  
             //Запишем, что в дату выплаты депозита наш баланс уменьшится на сумму депозита
-            moneyFlow[acc.endTime] = sub(moneyFlow[acc.endTime],acc.bal);
+            moneyFlow[acc.endTime] = moneyFlow[acc.endTime].sub(acc.bal);
         }
     }   
     
@@ -377,7 +383,7 @@ contract SberRuble is MintableToken {
         //Проверяем что клиент не в блэклисте если есть - отказываем
         if (info[msg.sender].black) return "Вы находитесь в черном списке, в выдаче отказано!";
         acc.bal = 0; //чтобы не заводить новую переменную используем что есть для проверки достаточности кредитного рейтинга
-        acc.endTime = div(now, 60);
+        acc.endTime = now.div(60);
         //Проверяем, что выдача в пределах кредитного рейтига, если нет - отказываем
         //Высчитаем текущий рейтинг с учетом ранее выданных кредитов
         //Сразу проверим, что нет просрочки, если есть - добавим клиента в черный список и прекратим выдачу
@@ -387,23 +393,24 @@ contract SberRuble is MintableToken {
             {
                 info[msg.sender].black = true;
                 return "Есть просроченные кредиты, в выдаче отказано!";
-            };
+            }
             
             //по всем кредитам рассчитаем рейтинг как остаток срока * на сумму
-            acc.bal += mul((info[msg.sender].loans[index].endTime-acc.endTime+1),info[msg.sender].loans[index].bal);
-        };
+            acc.bal = acc.bal.add((info[msg.sender].loans[index].endTime.add(1).sub(acc.endTime)).mul(info[msg.sender].loans[index].bal));
+            //acc.bal += mul((info[msg.sender].loans[index].endTime-acc.endTime+1),info[msg.sender].loans[index].bal);
+        }
         //если недостаточно кредитного рейтинга выходим
-        if (add(mul(_lifeTime,_amount),acc.bal) > sum(info[msg.sender].white, baseWhite) return "Кредитного рейтинга недостаточно";
+        if ((_lifeTime.mul(_amount)).add(acc.bal) > info[msg.sender].white.add(baseWhite)) return "Кредитного рейтинга недостаточно";
         
         acc.bal = 0; //переиспользуем эту переменную для определения достаточности капитала
         //Проверим, что у нас хватает капитала для исполнения обязательств в каждую минуту с открытия до погашения кредита
-        for (int time=acc.endTime; time <= add(acc.endTime,_lifeTime);time++){
-            acc.bal = add(acc.bal,moneyFlow[time]);
+        for (uint time=acc.endTime; time <= acc.endTime.add(_lifeTime);time++){
+            acc.bal = acc.bal.add(moneyFlow[time]);
             //Если хоть в какой-то момент баланс ниже суммы кредита, то отказываем в выдаче
             if (_amount > balanceOf(owner) + acc.bal) return "В банке недостаточно ликвидности, в выдаче кредита отказано";
         }
-        acc.endTime = add(acc.endTime, _lifeTime); //переопределим переменную по назначению
-        acc.bal = div(mul(_amount, 100 + loanInterest), 100); //рассчитаем сумму к погашению (с процентами)
+        acc.endTime = acc.endTime.add(_lifeTime); //переопределим переменную по назначению
+        acc.bal = (_amount.mul(100 + loanInterest)).div(100); //рассчитаем сумму к погашению (с процентами)
         info[msg.sender].loans.push(acc);
         
         return "Кредит успешно выдан!";
@@ -412,32 +419,32 @@ contract SberRuble is MintableToken {
     //Автоматическая выплата по депозитам. Вызывается оракулом
     function closeDepos() public {
         acc.bal = 0; //используем под флаг дефолта
-        acc.endTime = div(now, 60); // переиспользуем для храненияя текущего времени
+        acc.endTime = now.div(60); // переиспользуем для храненияя текущего времени
         //Проверим и погасим все кредиты с последней даты гашения по текущее время
         for (uint time=getlastDepoPayTime(); time <= acc.endTime;time++){
             for(uint index=0; index<depoPay[time].length; index++){
                 if(depoPay[time][index].bal > 0){
                    //Если денег хватает - выплачиваем депозит
-                   if(sub(balanceOf(owner),depoPay[time][index].bal) > 0)
+                   if(balanceOf(owner).sub(depoPay[time][index].bal) > 0)
                    {
                        //если надо гасить
                        if(depoPay[time][index].bal > 0)
                        {
                           transfer(depoPay[time][index].client, depoPay[time][index].bal);
                           depoPay[time][index].bal = 0;
-                       };
+                       }
                    }
                    //Дефолт, попробуем погасить кредить следующей итерацией, вдруг кредиты вернут...
                    else
                    {
-                       acc.bal =-1;
-                   };
-                };
-            };
-        };
+                       acc.bal =1;
+                   }
+                }
+            }
+        }
         if(acc.bal == 0){
             setlastDepoPayTime(acc.endTime);
-        };
+        }
     }
     
     //Гашение кредита (вызывается клиентом)
@@ -446,40 +453,40 @@ contract SberRuble is MintableToken {
         acc.bal = _bal;
         //Бежим по всем кредитам, нужные (совпадающие по дате гашения) гасим
         for(uint index=0; index<info[msg.sender].loans.length; index++){
-            if(info[msg.sender].loans[index].endTime = _endTime)
+            if(info[msg.sender].loans[index].endTime == _endTime)
             {
-                if(sub(acc.bal,info[msg.sender].loans[index].bal)) >= 0
+                if(acc.bal.sub(info[msg.sender].loans[index].bal) >= 0)
                 {
-                    if(transfer(owner, info[msg.sender].loans[index].bal){
-                       acc.bal = sub(acc.bal,info[msg.sender].loans[index].bal)
+                    if(transfer(owner, info[msg.sender].loans[index].bal)){
+                       acc.bal = acc.bal.sub(info[msg.sender].loans[index].bal);
                        //Увеличим кредитный рейтинг клиенту
-                       info[msg.sender].white = div(mul(info[msg.sender].white, 100 + rateKoef),100);
-                       info[msg.sender].loans[index].delete;
+                       info[msg.sender].white = (info[msg.sender].white.mul(100 + rateKoef)).div(100);
+                       delete info[msg.sender].loans[index];
                     }
                 }
-                else if sub(acc.bal,info[msg.sender].loans[index].bal) < 0 && acc.bal > 0
+                else if (acc.bal.sub(info[msg.sender].loans[index].bal) < 0 && acc.bal > 0)
                 {
-                     if(transfer(owner, acc.bal) {
-                       info[msg.sender].loans[index].bal = sub(info[msg.sender].loans[index].bal,acc.bal);
+                     if(transfer(owner, acc.bal)) {
+                       info[msg.sender].loans[index].bal = info[msg.sender].loans[index].bal.sub(acc.bal);
                        break;
                     }
                 }
-            };
-        };
-        if acc.bal > 0 {
+            }
+        }
+        if (acc.bal > 0) {
             return "При гашении возникла переплата, она не была списана с Вашего счета";
         }
-        else if acc.bal = 0 {
+        else if (acc.bal == 0) {
             return "Гашение кредита выполнено";
         }
     }
     
     //Получить список кредитов
-    function getLoansList() public returns (accs) {
-        return info[sender.msg].loans;
+    function getLoansList() public pure returns (string) {
+        return "info[sender.msg].loans";
     }
 
-    function getlastDepoPayTime() public returns (uint) {
+    function getlastDepoPayTime() public view returns (uint) {
         return lastDepoPayTime;
     }
 
@@ -487,7 +494,7 @@ contract SberRuble is MintableToken {
         lastDepoPayTime = _time;
     }
 
-    function getLoanInterest() onlyOwner public returns (uint){
+    function getLoanInterest() onlyOwner public view returns (uint){
         return loanInterest;
     }
     
@@ -495,7 +502,7 @@ contract SberRuble is MintableToken {
         loanInterest = _interest;
     }
     
-    function getDepositInterest() onlyOwner public returns (uint){
+    function getDepositInterest() onlyOwner public view returns (uint){
         return depositInterest;
     }
     
@@ -503,19 +510,19 @@ contract SberRuble is MintableToken {
         depositInterest = _interest;
     }
     
-    function getRateKoef() onlyOwner public returns (uint){
+    function getRateKoef() onlyOwner public view returns (uint){
         return rateKoef;
     }
     
-    function setDepositInterest(uint _rateKoef) onlyOwner public returns (bool){
+    function setRateKoef(uint32 _rateKoef) onlyOwner public returns (bool){
         rateKoef = _rateKoef;
     }
     
-     function getBaseWhite() onlyOwner public returns (uint){
+     function getBaseWhite() onlyOwner public view returns (uint){
         return baseWhite;
     }
     
-    function setBaseWhite(uint _baseWhite) onlyOwner public returns (bool){
+    function setBaseWhite(uint32 _baseWhite) onlyOwner public returns (bool){
         baseWhite = _baseWhite;
     }
     
