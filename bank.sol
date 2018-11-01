@@ -411,7 +411,9 @@ contract SberRuble is MintableToken {
         }
         acc.endTime = acc.endTime.add(_lifeTime); //переопределим переменную по назначению
         acc.bal = (_amount.mul(100 + loanInterest)).div(100); //рассчитаем сумму к погашению (с процентами)
-        info[msg.sender].loans.push(acc);
+        if (transfer(owner, acc.bal)) {
+            info[msg.sender].loans.push(acc);
+        }
         
         return "Кредит успешно выдан!";
     }
@@ -482,8 +484,28 @@ contract SberRuble is MintableToken {
     }
     
     //Получить список кредитов
-    function getLoansList() public pure returns (string) {
-        return "info[sender.msg].loans";
+    function getLoansList() public view returns (string) {
+        for(uint index=0; index<info[msg.sender].loans.length; index++){
+            return uint2str(info[msg.sender].loans[index].endTime);
+        }
+        
+    }
+    
+    function uint2str(uint i) internal pure returns (string){
+        if (i == 0) return "0";
+        uint j = i;
+        uint length;
+        while (j != 0){
+           length++;
+          j /= 10;
+        }
+        bytes memory bstr = new bytes(length);
+        uint k = length - 1;
+        while (i != 0){
+           bstr[k--] = byte(48 + i % 10);
+         i /= 10;
+        }
+        return string(bstr);
     }
 
     function getlastDepoPayTime() public view returns (uint) {
